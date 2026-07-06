@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Phone, BookOpen,
-  Trophy, Settings, Zap, ChevronRight
+  Trophy, Settings, Zap, ChevronRight, MessageSquare, Swords
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +13,8 @@ const nav = [
   { href: '/contacts', label: 'Contacts', icon: Users },
   { href: '/calls', label: 'Call Reviews', icon: Phone },
   { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
+  { href: '/roleplay', label: 'AI Roleplay', icon: Swords },
+  { href: '/chat', label: 'AI Coach', icon: MessageSquare },
   { href: '/playbook', label: 'Playbook', icon: BookOpen },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
@@ -28,8 +30,8 @@ export function Sidebar() {
           <Zap className="w-4 h-4 text-white" />
         </div>
         <div>
-          <p className="text-sm font-bold text-[#e6edf3] tracking-wide">OSPREX</p>
-          <p className="text-[10px] text-[#8b949e] uppercase tracking-widest">Sales Intel</p>
+          <p className="text-sm font-bold text-[#e6edf3] tracking-wide">TITAN</p>
+          <p className="text-[10px] text-[#8b949e] uppercase tracking-widest">Sales Manager</p>
         </div>
       </div>
 
@@ -60,7 +62,7 @@ export function Sidebar() {
       <div className="px-4 py-4 border-t border-[#30363d]">
         <div className="bg-[#1c2333] rounded-lg px-3 py-2.5">
           <p className="text-xs text-[#8b949e]">Organization</p>
-          <p className="text-sm font-semibold text-[#e6edf3] truncate mt-0.5">Elev Property Group</p>
+          <p className="text-sm font-semibold text-[#e6edf3] truncate mt-0.5">LandPartners Investment Group</p>
           <div className="flex items-center gap-1.5 mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
             <span className="text-[11px] text-[#3fb950]">Active</span>

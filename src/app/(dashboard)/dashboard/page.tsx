@@ -1,6 +1,7 @@
 'use client'
 
-import { Phone, Star, TrendingUp, AlertTriangle, Zap, Trophy, Target } from 'lucide-react'
+import Link from 'next/link'
+import { Phone, Star, TrendingUp, AlertTriangle, Zap, Trophy, Target, Flame, Tag, DollarSign } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STATS = [
@@ -14,6 +15,14 @@ const TEAM = [
   { name: 'Carlos Cacho', calls: 18, score: 8.1, trend: '+0.4', badges: ['🔥 Closer', '💪 Objection Crusher'] },
   { name: 'Eloisa V.', calls: 14, score: 7.3, trend: '+0.2', badges: ['⚡ Speed Demon'] },
   { name: 'Fernan D.', calls: 15, score: 5.9, trend: '-0.3', badges: [] },
+]
+
+const HOT_LEADS = [
+  { id: '1', name: 'John Martinez', address: '1904 2nd Ave E, Palmetto, FL', score: 8.4, deal: 'contract' as const, amount: 218000, last_call: '2 days ago', rep: 'Carlos C.' },
+  { id: '2', name: 'Sandra Perez', address: '1977 Citrus Hill Rd, Clearwater, FL', score: 7.9, deal: 'offer' as const, amount: 405000, last_call: '1 day ago', rep: 'Eloisa V.' },
+  { id: '3', name: 'Robert W.', address: '1121 NE 11th Ter, Cape Coral, FL', score: 7.6, deal: null, amount: null, last_call: 'Today', rep: 'Carlos C.' },
+  { id: '4', name: 'Linda Owens', address: '1005 Hollyberry Ct, Brandon, FL', score: 7.2, deal: null, amount: null, last_call: '3 days ago', rep: 'Eloisa V.' },
+  { id: '5', name: 'Marcus T.', address: '8822 Lakeview Dr, Tampa, FL', score: 6.9, deal: 'seller_bottom_dollar' as const, amount: 175000, last_call: 'Today', rep: 'Carlos C.' },
 ]
 
 const FOCUS_TODAY = [
@@ -35,7 +44,7 @@ export default function DashboardPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-[#e6edf3]">Team Dashboard</h1>
-        <p className="text-sm text-[#8b949e] mt-1">Last 7 days · Elev Property Group</p>
+        <p className="text-sm text-[#8b949e] mt-1">Last 7 days · LandPartners Investment Group</p>
       </div>
 
       {/* KPI Row */}
@@ -49,6 +58,50 @@ export default function DashboardPage() {
             <p className={cn('text-3xl font-black tabular-nums', color)}>{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* 5 Hottest Leads to Close */}
+      <div className="rounded-xl border border-[#f85149]/20 bg-[#f85149]/5 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Flame className="w-4 h-4 text-[#f85149]" />
+          <h2 className="text-sm font-semibold text-[#e6edf3]">5 Hottest Leads to Close</h2>
+          <span className="text-[10px] text-[#f85149] bg-[#f85149]/10 border border-[#f85149]/20 px-2 py-0.5 rounded ml-auto">Priority</span>
+        </div>
+        <div className="space-y-2">
+          {HOT_LEADS.map((lead, i) => (
+            <Link key={lead.id} href={`/contacts/${lead.id}`} className="flex items-center gap-3 rounded-lg bg-[#161b22] border border-[#30363d] px-4 py-3 hover:border-[#f85149]/30 hover:bg-[#1c2333] transition-all group">
+              <span className="text-xs font-bold text-[#484f58] w-4">{i + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-[#e6edf3] truncate">{lead.name}</p>
+                  {lead.deal === 'contract' && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#3fb950]/10 text-[#3fb950] border-[#3fb950]/20 whitespace-nowrap">Contract</span>
+                  )}
+                  {lead.deal === 'offer' && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#e3b341]/10 text-[#e3b341] border-[#e3b341]/20 whitespace-nowrap">Offer</span>
+                  )}
+                  {lead.deal === 'seller_bottom_dollar' && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#f85149]/10 text-[#f85149] border-[#f85149]/20 whitespace-nowrap">Bottom $</span>
+                  )}
+                </div>
+                <p className="text-xs text-[#484f58] truncate">{lead.address}</p>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                {lead.amount && (
+                  <div className="flex items-center gap-0.5 text-xs text-[#8b949e]">
+                    <DollarSign className="w-3 h-3" />
+                    <span className="tabular-nums">{(lead.amount / 1000).toFixed(0)}k</span>
+                  </div>
+                )}
+                <div className="text-right">
+                  <p className={cn('text-sm font-bold tabular-nums', lead.score >= 7.5 ? 'text-[#3fb950]' : lead.score >= 5 ? 'text-[#e3b341]' : 'text-[#f85149]')}>{lead.score.toFixed(1)}</p>
+                  <p className="text-[10px] text-[#484f58]">{lead.rep}</p>
+                </div>
+                <span className="text-[10px] text-[#484f58]">{lead.last_call}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-5">

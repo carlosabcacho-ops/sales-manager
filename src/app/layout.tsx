@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Osprex — Sales Intelligence",
-  description: "AI-powered sales call coaching and performance platform",
+  title: "Titan Sales Manager",
+  description: "AI-powered sales call coaching and performance platform — LandPartners Investment Group",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
