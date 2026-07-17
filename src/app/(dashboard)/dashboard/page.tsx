@@ -1,34 +1,12 @@
-'use client'
-
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Phone, Star, TrendingUp, AlertTriangle, Zap, Trophy, Target, Flame, Tag, DollarSign } from 'lucide-react'
+import {
+  Phone, Star, TrendingUp, AlertTriangle, Trophy, Target,
+  Flame, DollarSign, Zap
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const STATS = [
-  { label: 'Raw Calls (7d)', value: '47', icon: Phone, color: 'text-[#388bfd]', bg: 'bg-[#1f6feb]/10 border-[#1f6feb]/20' },
-  { label: 'Calls Graded', value: '38', icon: Star, color: 'text-[#e3b341]', bg: 'bg-[#d29922]/10 border-[#d29922]/20' },
-  { label: 'Avg Rep Score', value: '6.4', icon: TrendingUp, color: 'text-[#3fb950]', bg: 'bg-[#2ea043]/10 border-[#2ea043]/20' },
-  { label: 'Manager Alerts', value: '5', icon: AlertTriangle, color: 'text-[#f85149]', bg: 'bg-[#da3633]/10 border-[#da3633]/20' },
-]
-
-const TEAM = [
-  { name: 'Carlos Cacho', calls: 18, score: 8.1, trend: '+0.4', badges: ['🔥 Closer', '💪 Objection Crusher'] },
-  { name: 'Eloisa V.', calls: 14, score: 7.3, trend: '+0.2', badges: ['⚡ Speed Demon'] },
-  { name: 'Fernan D.', calls: 15, score: 5.9, trend: '-0.3', badges: [] },
-]
-
-const HOT_LEADS = [
-  { id: '1', name: 'John Martinez', address: '1904 2nd Ave E, Palmetto, FL', score: 8.4, deal: 'contract' as const, amount: 218000, last_call: '2 days ago', rep: 'Carlos C.' },
-  { id: '2', name: 'Sandra Perez', address: '1977 Citrus Hill Rd, Clearwater, FL', score: 7.9, deal: 'offer' as const, amount: 405000, last_call: '1 day ago', rep: 'Eloisa V.' },
-  { id: '3', name: 'Robert W.', address: '1121 NE 11th Ter, Cape Coral, FL', score: 7.6, deal: null, amount: null, last_call: 'Today', rep: 'Carlos C.' },
-  { id: '4', name: 'Linda Owens', address: '1005 Hollyberry Ct, Brandon, FL', score: 7.2, deal: null, amount: null, last_call: '3 days ago', rep: 'Eloisa V.' },
-  { id: '5', name: 'Marcus T.', address: '8822 Lakeview Dr, Tampa, FL', score: 6.9, deal: 'seller_bottom_dollar' as const, amount: 175000, last_call: 'Today', rep: 'Carlos C.' },
-]
-
-const FOCUS_TODAY = [
-  { rep: 'Fernan D.', weakness: 'Closing Attempt', score: 2.1, drill: 'Practice: "If we can agree on the number today, I can have the paperwork to you within the hour." — Role-play this close 10x before your next call.' },
-  { rep: 'Eloisa V.', weakness: 'Consequence Amplification', score: 4.3, drill: 'Drill: Ask "What happens if you don\'t sell in the next 45 days?" and stay silent for 5 seconds.' },
-]
+import type { LeaderboardEntry, Contact } from '@/types'
 
 function ScoreBar({ score }: { score: number }) {
   const color = score >= 7.5 ? '#3fb950' : score >= 5 ? '#e3b341' : '#f85149'
@@ -39,12 +17,149 @@ function ScoreBar({ score }: { score: number }) {
   )
 }
 
-export default function DashboardPage() {
+function scoreColor(n: number) {
+  if (n >= 7.5) return 'text-[#3fb950]'
+  if (n >= 5) return 'text-[#e3b341]'
+  return 'text-[#f85149]'
+}
+
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('auth_user_id', user.id)
+    .single()
+
+  const orgId = userData?.organization_id
+  if (!orgId) redirect('/login')
+
+  // Date range: last 7 days
+  const since = new Date()
+  since.setDate(since.getDate() - 7)
+  const sinceISO = since.toISOString()
+
+  // Current season (YYYY-MM)
+  const now = new Date()
+  const currentSeason = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthName = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+
+  // KPI queries in parallel
+  const [
+    { count: totalCalls },
+    { count: gradedCalls },
+    { count: alertCount },
+    { data: reviewsForAvg },
+    { data: leaderboard },
+    { data: hotLeads },
+    { data: focusReps },
+  ] = await Promise.all([
+    supabase
+      .from('calls')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .gte('called_at', sinceISO),
+
+    supabase
+      .from('calls')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('processing_status', 'completed')
+      .gte('called_at', sinceISO),
+
+    supabase
+      .from('call_reviews')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('manager_alert', true),
+
+    supabase
+      .from('call_reviews')
+      .select('rep_score')
+      .eq('organization_id', orgId)
+      .not('rep_score', 'is', null),
+
+    supabase
+      .from('leaderboards')
+      .select('*, users(name, email, avatar_url, role)')
+      .eq('organization_id', orgId)
+      .eq('season', currentSeason)
+      .order('ranking_points', { ascending: false })
+      .limit(5),
+
+    supabase
+      .from('contacts')
+      .select('id, name, address, city, state, label')
+      .eq('organization_id', orgId)
+      .eq('label', 'HOT')
+      .order('updated_at', { ascending: false })
+      .limit(5),
+
+    supabase
+      .from('leaderboards')
+      .select('user_id, avg_rep_score, users(name)')
+      .eq('organization_id', orgId)
+      .eq('season', currentSeason)
+      .not('avg_rep_score', 'is', null)
+      .order('avg_rep_score', { ascending: true })
+      .limit(3),
+  ])
+
+  const avgRepScore =
+    reviewsForAvg && reviewsForAvg.length > 0
+      ? reviewsForAvg.reduce((sum: number, r: { rep_score: number }) => sum + (r.rep_score ?? 0), 0) /
+        reviewsForAvg.length
+      : 0
+
+  const STATS = [
+    {
+      label: 'Calls (7d)',
+      value: String(totalCalls ?? 0),
+      icon: Phone,
+      color: 'text-[#15803d]',
+      bg: 'bg-[#166534]/10 border-[#166534]/20',
+    },
+    {
+      label: 'Calls Avaliadas',
+      value: String(gradedCalls ?? 0),
+      icon: Star,
+      color: 'text-[#e3b341]',
+      bg: 'bg-[#d29922]/10 border-[#d29922]/20',
+    },
+    {
+      label: 'Score Médio Rep',
+      value: avgRepScore > 0 ? avgRepScore.toFixed(1) : '—',
+      icon: TrendingUp,
+      color: 'text-[#3fb950]',
+      bg: 'bg-[#2ea043]/10 border-[#2ea043]/20',
+    },
+    {
+      label: 'Alertas Gerente',
+      value: String(alertCount ?? 0),
+      icon: AlertTriangle,
+      color: 'text-[#f85149]',
+      bg: 'bg-[#da3633]/10 border-[#da3633]/20',
+    },
+  ]
+
+  const typedLeaderboard = (leaderboard ?? []) as LeaderboardEntry[]
+  const typedHotLeads = (hotLeads ?? []) as Contact[]
+  const typedFocusReps = (focusReps ?? []) as unknown as Array<{
+    user_id: string
+    avg_rep_score: number
+    users: { name: string } | null
+  }>
+
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#e6edf3]">Team Dashboard</h1>
-        <p className="text-sm text-[#8b949e] mt-1">Last 7 days · LandPartners Investment Group</p>
+        <h1 className="text-2xl font-bold text-[#e6edf3]">Painel Geral</h1>
+        <p className="text-sm text-[#8b949e] mt-1">Últimos 7 dias · {monthName}</p>
       </div>
 
       {/* KPI Row */}
@@ -60,48 +175,39 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* 5 Hottest Leads to Close */}
+      {/* Hot Leads */}
       <div className="rounded-xl border border-[#f85149]/20 bg-[#f85149]/5 p-5">
         <div className="flex items-center gap-2 mb-4">
           <Flame className="w-4 h-4 text-[#f85149]" />
-          <h2 className="text-sm font-semibold text-[#e6edf3]">5 Hottest Leads to Close</h2>
-          <span className="text-[10px] text-[#f85149] bg-[#f85149]/10 border border-[#f85149]/20 px-2 py-0.5 rounded ml-auto">Priority</span>
+          <h2 className="text-sm font-semibold text-[#e6edf3]">Leads Quentes Prioritários</h2>
+          <span className="text-[10px] text-[#f85149] bg-[#f85149]/10 border border-[#f85149]/20 px-2 py-0.5 rounded ml-auto">
+            Prioridade
+          </span>
         </div>
-        <div className="space-y-2">
-          {HOT_LEADS.map((lead, i) => (
-            <Link key={lead.id} href={`/contacts/${lead.id}`} className="flex items-center gap-3 rounded-lg bg-[#161b22] border border-[#30363d] px-4 py-3 hover:border-[#f85149]/30 hover:bg-[#1c2333] transition-all group">
-              <span className="text-xs font-bold text-[#484f58] w-4">{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+        {typedHotLeads.length === 0 ? (
+          <p className="text-sm text-[#484f58] text-center py-4">Nenhum lead quente no momento.</p>
+        ) : (
+          <div className="space-y-2">
+            {typedHotLeads.map((lead, i) => (
+              <Link
+                key={lead.id}
+                href={`/contacts/${lead.id}`}
+                className="flex items-center gap-3 rounded-lg bg-[#161b22] border border-[#30363d] px-4 py-3 hover:border-[#f85149]/30 hover:bg-[#1c2333] transition-all group"
+              >
+                <span className="text-xs font-bold text-[#484f58] w-4">{i + 1}</span>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-[#e6edf3] truncate">{lead.name}</p>
-                  {lead.deal === 'contract' && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#3fb950]/10 text-[#3fb950] border-[#3fb950]/20 whitespace-nowrap">Contract</span>
-                  )}
-                  {lead.deal === 'offer' && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#e3b341]/10 text-[#e3b341] border-[#e3b341]/20 whitespace-nowrap">Offer</span>
-                  )}
-                  {lead.deal === 'seller_bottom_dollar' && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#f85149]/10 text-[#f85149] border-[#f85149]/20 whitespace-nowrap">Bottom $</span>
-                  )}
+                  <p className="text-xs text-[#484f58] truncate">
+                    {[lead.address, lead.city, lead.state].filter(Boolean).join(', ')}
+                  </p>
                 </div>
-                <p className="text-xs text-[#484f58] truncate">{lead.address}</p>
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                {lead.amount && (
-                  <div className="flex items-center gap-0.5 text-xs text-[#8b949e]">
-                    <DollarSign className="w-3 h-3" />
-                    <span className="tabular-nums">{(lead.amount / 1000).toFixed(0)}k</span>
-                  </div>
-                )}
-                <div className="text-right">
-                  <p className={cn('text-sm font-bold tabular-nums', lead.score >= 7.5 ? 'text-[#3fb950]' : lead.score >= 5 ? 'text-[#e3b341]' : 'text-[#f85149]')}>{lead.score.toFixed(1)}</p>
-                  <p className="text-[10px] text-[#484f58]">{lead.rep}</p>
-                </div>
-                <span className="text-[10px] text-[#484f58]">{lead.last_call}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#f85149]/10 text-[#f85149] border-[#f85149]/20 whitespace-nowrap">
+                  HOT
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-5">
@@ -109,63 +215,94 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-5">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-4 h-4 text-[#e3b341]" />
-            <h2 className="text-sm font-semibold text-[#e6edf3]">July Leaderboard</h2>
+            <h2 className="text-sm font-semibold text-[#e6edf3]">
+              Ranking — {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
+            </h2>
           </div>
-          <div className="space-y-4">
-            {TEAM.map((rep, i) => (
-              <div key={rep.name} className="flex items-center gap-3">
-                <span className={cn('w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                  i === 0 ? 'bg-[#e3b341]/20 text-[#e3b341]' : i === 1 ? 'bg-[#8b949e]/20 text-[#8b949e]' : 'bg-[#21262d] text-[#484f58]'
-                )}>{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-medium text-[#e6edf3] truncate">{rep.name}</p>
-                    <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                      <span className={cn('text-xs font-bold tabular-nums', parseFloat(rep.trend) >= 0 ? 'text-[#3fb950]' : 'text-[#f85149]')}>{rep.trend}</span>
-                      <span className="text-sm font-bold text-[#e6edf3] tabular-nums">{rep.score}</span>
+          {typedLeaderboard.length === 0 ? (
+            <p className="text-sm text-[#484f58] text-center py-4">Sem dados de ranking para este mês.</p>
+          ) : (
+            <div className="space-y-4">
+              {typedLeaderboard.map((entry, i) => {
+                const repName = (entry.user as { name: string } | undefined)?.name ?? 'Rep'
+                return (
+                  <div key={entry.id} className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                        i === 0
+                          ? 'bg-[#e3b341]/20 text-[#e3b341]'
+                          : i === 1
+                          ? 'bg-[#8b949e]/20 text-[#8b949e]'
+                          : 'bg-[#21262d] text-[#484f58]'
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-[#e6edf3] truncate">{repName}</p>
+                        <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                          <span className="text-sm font-bold text-[#e6edf3] tabular-nums">
+                            {entry.avg_rep_score.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <ScoreBar score={entry.avg_rep_score} />
+                        <span className="text-[10px] text-[#484f58]">{entry.calls_count} calls</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <ScoreBar score={rep.score} />
-                    <span className="text-[10px] text-[#484f58]">{rep.calls} calls</span>
-                  </div>
-                  {rep.badges.length > 0 && (
-                    <div className="flex gap-1 mt-1.5 flex-wrap">
-                      {rep.badges.map(b => (
-                        <span key={b} className="text-[10px] bg-[#21262d] text-[#8b949e] px-1.5 py-0.5 rounded">{b}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Focus for Today's Training */}
-        <div className="rounded-xl border border-[#1f6feb]/30 bg-[#1f6feb]/5 p-5">
+        {/* Focus Today */}
+        <div className="rounded-xl border border-[#166534]/30 bg-[#166534]/5 p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Target className="w-4 h-4 text-[#388bfd]" />
-            <h2 className="text-sm font-semibold text-[#e6edf3]">Focus for Today's Training</h2>
-            <span className="text-[10px] text-[#388bfd] bg-[#1f6feb]/10 border border-[#1f6feb]/20 px-2 py-0.5 rounded ml-auto">AI Generated</span>
+            <Target className="w-4 h-4 text-[#15803d]" />
+            <h2 className="text-sm font-semibold text-[#e6edf3]">Foco do Treinamento de Hoje</h2>
+            <span className="text-[10px] text-[#15803d] bg-[#166534]/10 border border-[#166534]/20 px-2 py-0.5 rounded ml-auto">
+              IA
+            </span>
           </div>
-          <div className="space-y-4">
-            {FOCUS_TODAY.map((item, i) => (
-              <div key={i} className="rounded-lg border border-[#30363d] bg-[#161b22] p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-xs text-[#8b949e]">{item.rep}</p>
-                    <p className="text-sm font-semibold text-[#e6edf3]">{item.weakness}</p>
+          {typedFocusReps.length === 0 ? (
+            <div className="rounded-lg border border-[#30363d] bg-[#161b22] p-4 text-center">
+              <p className="text-sm text-[#484f58]">Nenhum dado de treinamento disponível.</p>
+              <p className="text-xs text-[#484f58] mt-1">
+                Assim que calls forem analisadas, as sugestões de treinamento aparecerão aqui.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {typedFocusReps.map((rep, i) => {
+                const repName = rep.users?.name ?? 'Rep'
+                const score = rep.avg_rep_score
+                return (
+                  <div key={i} className="rounded-lg border border-[#30363d] bg-[#161b22] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-xs text-[#8b949e]">{repName}</p>
+                        <p className="text-sm font-semibold text-[#e6edf3]">Score baixo — revisar calls</p>
+                      </div>
+                      <span className={cn('text-lg font-black tabular-nums', scoreColor(score))}>
+                        {score.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2 mt-2 pt-2 border-t border-[#21262d]">
+                      <Zap className="w-3.5 h-3.5 text-[#15803d] mt-0.5 shrink-0" />
+                      <p className="text-xs text-[#8b949e] leading-relaxed">
+                        Revise as últimas calls deste rep e identifique os pontos de melhoria no playbook.
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-lg font-black text-[#f85149] tabular-nums">{item.score.toFixed(1)}</span>
-                </div>
-                <div className="flex items-start gap-2 mt-2 pt-2 border-t border-[#21262d]">
-                  <Zap className="w-3.5 h-3.5 text-[#388bfd] mt-0.5 shrink-0" />
-                  <p className="text-xs text-[#8b949e] leading-relaxed">{item.drill}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
