@@ -68,6 +68,13 @@ export interface Contact {
   last_call_at?: string
 }
 
+/** Contact with guaranteed aggregated stats from a server query */
+export interface ContactWithStats extends Omit<Contact, 'last_call_at'> {
+  calls_count: number
+  avg_score: number
+  last_call_at: string | null
+}
+
 export interface TranscriptSegment {
   speaker: 'Rep' | 'Contact'
   text: string
@@ -92,6 +99,15 @@ export interface Call {
   created_at: string
   contact?: Contact
   user?: User
+}
+
+/** Call enriched with review scores and related entity names */
+export interface CallWithRelations extends Call {
+  contact_name: string | null
+  rep_name: string | null
+  rep_score: number | null
+  lead_score: number | null
+  manager_alert: boolean
 }
 
 export interface ScoreBreakdownItem {
@@ -165,7 +181,12 @@ export interface LeaderboardEntry {
   calls_count: number
   avg_rep_score: number
   badges_earned?: string[]
-  user?: User
+  user?: {
+    name: string
+    email: string
+    avatar_url?: string
+    role?: UserRole
+  }
 }
 
 export interface GHLWebhookPayload {
