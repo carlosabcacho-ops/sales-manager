@@ -85,7 +85,7 @@ export default async function DashboardPage() {
     return acc
   }, {})
 
-  const hotLeads = allContacts.filter(c => c.label === 'HOT').slice(0, 5) as Array<{
+  const hotLeads = (allContacts.filter(c => c.label === 'HOT').slice(0, 5) as unknown) as Array<{
     id: string
     name: string
     label: string
