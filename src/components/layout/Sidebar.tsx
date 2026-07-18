@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Phone, BookOpen, Trophy, Settings,
   ChevronRight, MessageSquare, Swords, LogOut,
-  Building2, Grid3x3, TrendingUp,
+  Building2, Grid3x3, TrendingUp, FileText, AlertCircle, BarChart3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -33,6 +33,21 @@ const groups = [
       { href: '/contacts', label: 'Pipeline', icon: TrendingUp },
       { href: '/calls', label: 'Análise de Calls', icon: Phone },
       { href: '/leaderboard', label: 'Ranking', icon: Trophy },
+    ],
+  },
+  {
+    key: 'cobranca',
+    label: 'Cobrança',
+    items: [
+      { href: '/contratos', label: 'Contratos', icon: FileText },
+      { href: '/cobranca', label: 'Inadimplência', icon: AlertCircle },
+    ],
+  },
+  {
+    key: 'analytics',
+    label: 'Analytics',
+    items: [
+      { href: '/metricas', label: 'Métricas', icon: BarChart3 },
     ],
   },
   {
