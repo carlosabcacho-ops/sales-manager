@@ -1,33 +1,34 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import {
-  Phone, Star, TrendingUp, AlertTriangle, Trophy, Target,
-  Flame, DollarSign, Zap
-} from 'lucide-react'
+import { Building2, Grid3x3, Users, Flame, TrendingUp, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { LeaderboardEntry, Contact } from '@/types'
 
-function ScoreBar({ score }: { score: number }) {
-  const color = score >= 7.5 ? '#3fb950' : score >= 5 ? '#e3b341' : '#f85149'
-  return (
-    <div className="h-1.5 bg-[#21262d] rounded-full w-24">
-      <div className="h-full rounded-full" style={{ width: `${(score / 10) * 100}%`, backgroundColor: color }} />
-    </div>
-  )
+const STAGE_LABELS: Record<string, string> = {
+  novo_lead:   'Novo Lead',
+  qualificado: 'Qualificado',
+  visita:      'Visita',
+  proposta:    'Proposta',
+  contrato:    'Contrato',
+  pos_venda:   'Pós-venda',
 }
 
-function scoreColor(n: number) {
-  if (n >= 7.5) return 'text-[#3fb950]'
-  if (n >= 5) return 'text-[#e3b341]'
-  return 'text-[#f85149]'
+const STAGE_COLORS: Record<string, string> = {
+  novo_lead:   'bg-[#8b949e]/20 text-[#8b949e]',
+  qualificado: 'bg-[#1f6feb]/20 text-[#58a6ff]',
+  visita:      'bg-[#d29922]/20 text-[#e3b341]',
+  proposta:    'bg-[#bf8700]/20 text-[#f0c000]',
+  contrato:    'bg-[#166534]/20 text-[#3fb950]',
+  pos_venda:   'bg-[#166534]/30 text-[#56d364]',
+}
+
+function fmt(n: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n)
 }
 
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const { data: userData } = await supabase
@@ -39,132 +40,74 @@ export default async function DashboardPage() {
   const orgId = userData?.organization_id
   if (!orgId) redirect('/login')
 
-  // Date range: last 7 days
-  const since = new Date()
-  since.setDate(since.getDate() - 7)
-  const sinceISO = since.toISOString()
-
-  // Current season (YYYY-MM)
-  const now = new Date()
-  const currentSeason = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const monthName = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
-
-  // KPI queries in parallel
   const [
-    { count: totalCalls },
-    { count: gradedCalls },
-    { count: alertCount },
-    { data: reviewsForAvg },
-    { data: leaderboard },
-    { data: hotLeads },
-    { data: focusReps },
+    { data: lotes },
+    { data: contacts },
+    { data: empreendimentos },
   ] = await Promise.all([
-    supabase
-      .from('calls')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .gte('called_at', sinceISO),
-
-    supabase
-      .from('calls')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('processing_status', 'completed')
-      .gte('called_at', sinceISO),
-
-    supabase
-      .from('call_reviews')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('manager_alert', true),
-
-    supabase
-      .from('call_reviews')
-      .select('rep_score')
-      .eq('organization_id', orgId)
-      .not('rep_score', 'is', null),
-
-    supabase
-      .from('leaderboards')
-      .select('*, users(name, email, avatar_url, role)')
-      .eq('organization_id', orgId)
-      .eq('season', currentSeason)
-      .order('ranking_points', { ascending: false })
-      .limit(5),
-
-    supabase
-      .from('contacts')
-      .select('id, name, address, city, state, label')
-      .eq('organization_id', orgId)
-      .eq('label', 'HOT')
-      .order('updated_at', { ascending: false })
-      .limit(5),
-
-    supabase
-      .from('leaderboards')
-      .select('user_id, avg_rep_score, users(name)')
-      .eq('organization_id', orgId)
-      .eq('season', currentSeason)
-      .not('avg_rep_score', 'is', null)
-      .order('avg_rep_score', { ascending: true })
-      .limit(3),
+    supabase.from('lotes').select('id, status, preco, data_venda, empreendimento_id').eq('organization_id', orgId),
+    supabase.from('contacts').select('id, name, label, stage, empreendimento_id, empreendimentos(nome)').eq('organization_id', orgId),
+    supabase.from('empreendimentos').select('id, nome, cidade, estado, status, total_lotes, preco_medio_lote').eq('organization_id', orgId).order('created_at', { ascending: false }),
   ])
 
-  const avgRepScore =
-    reviewsForAvg && reviewsForAvg.length > 0
-      ? reviewsForAvg.reduce((sum: number, r: { rep_score: number }) => sum + (r.rep_score ?? 0), 0) /
-        reviewsForAvg.length
-      : 0
+  const allLotes = lotes ?? []
+  const allContacts = contacts ?? []
+  const allEmps = empreendimentos ?? []
 
-  const STATS = [
-    {
-      label: 'Calls (7d)',
-      value: String(totalCalls ?? 0),
-      icon: Phone,
-      color: 'text-[#15803d]',
-      bg: 'bg-[#166534]/10 border-[#166534]/20',
-    },
-    {
-      label: 'Calls Avaliadas',
-      value: String(gradedCalls ?? 0),
-      icon: Star,
-      color: 'text-[#e3b341]',
-      bg: 'bg-[#d29922]/10 border-[#d29922]/20',
-    },
-    {
-      label: 'Score Médio Rep',
-      value: avgRepScore > 0 ? avgRepScore.toFixed(1) : '—',
-      icon: TrendingUp,
-      color: 'text-[#3fb950]',
-      bg: 'bg-[#2ea043]/10 border-[#2ea043]/20',
-    },
-    {
-      label: 'Alertas Gerente',
-      value: String(alertCount ?? 0),
-      icon: AlertTriangle,
-      color: 'text-[#f85149]',
-      bg: 'bg-[#da3633]/10 border-[#da3633]/20',
-    },
-  ]
+  const lotesDisp = allLotes.filter(l => l.status === 'disponivel').length
+  const lotesReserv = allLotes.filter(l => l.status === 'reservado').length
+  const lotesVend = allLotes.filter(l => l.status === 'vendido').length
 
-  const typedLeaderboard = (leaderboard ?? []) as LeaderboardEntry[]
-  const typedHotLeads = (hotLeads ?? []) as Contact[]
-  const typedFocusReps = (focusReps ?? []) as unknown as Array<{
-    user_id: string
-    avg_rep_score: number
-    users: { name: string } | null
+  const now = new Date()
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const vendidosMes = allLotes.filter(l => l.status === 'vendido' && l.data_venda && l.data_venda >= firstOfMonth).length
+  const valorVendidosMes = allLotes
+    .filter(l => l.status === 'vendido' && l.data_venda && l.data_venda >= firstOfMonth)
+    .reduce((sum, l) => sum + (l.preco ?? 0), 0)
+
+  const leadsQuentes = allContacts.filter(c => c.label === 'HOT').length
+  const totalPipeline = allContacts.length
+
+  const stagesOrder = ['novo_lead', 'qualificado', 'visita', 'proposta', 'contrato', 'pos_venda']
+  const stageCounts = stagesOrder.map(s => ({
+    stage: s,
+    count: allContacts.filter(c => c.stage === s).length,
+  }))
+  const maxStage = Math.max(...stageCounts.map(s => s.count), 1)
+
+  const monthName = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+
+  const lotesByEmp = allLotes.reduce<Record<string, { disp: number; reserv: number; vend: number }>>((acc, l) => {
+    if (!acc[l.empreendimento_id]) acc[l.empreendimento_id] = { disp: 0, reserv: 0, vend: 0 }
+    if (l.status === 'disponivel') acc[l.empreendimento_id].disp++
+    if (l.status === 'reservado') acc[l.empreendimento_id].reserv++
+    if (l.status === 'vendido') acc[l.empreendimento_id].vend++
+    return acc
+  }, {})
+
+  const hotLeads = allContacts.filter(c => c.label === 'HOT').slice(0, 5) as Array<{
+    id: string
+    name: string
+    label: string
+    stage: string
+    empreendimentos: { nome: string } | null
   }>
 
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-[#e6edf3]">Painel Geral</h1>
-        <p className="text-sm text-[#8b949e] mt-1">Últimos 7 dias · {monthName}</p>
+        <p className="text-sm text-[#8b949e] mt-1">{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</p>
       </div>
 
       {/* KPI Row */}
       <div className="grid grid-cols-4 gap-4">
-        {STATS.map(({ label, value, icon: Icon, color, bg }) => (
+        {[
+          { label: 'Lotes Disponíveis',  value: lotesDisp,      icon: Grid3x3,   color: 'text-[#15803d]', bg: 'bg-[#166534]/10 border-[#166534]/20' },
+          { label: 'Reservados',          value: lotesReserv,    icon: Grid3x3,   color: 'text-[#e3b341]', bg: 'bg-[#d29922]/10 border-[#d29922]/20' },
+          { label: 'Vendidos (Total)',     value: lotesVend,      icon: Building2, color: 'text-[#3fb950]', bg: 'bg-[#2ea043]/10 border-[#2ea043]/20' },
+          { label: 'Leads no Pipeline',   value: totalPipeline,  icon: Users,     color: 'text-[#58a6ff]', bg: 'bg-[#1f6feb]/10 border-[#1f6feb]/20' },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className={cn('rounded-xl border p-4', bg)}>
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-[#8b949e] font-medium">{label}</p>
@@ -175,136 +118,140 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Hot Leads */}
-      <div className="rounded-xl border border-[#f85149]/20 bg-[#f85149]/5 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Flame className="w-4 h-4 text-[#f85149]" />
-          <h2 className="text-sm font-semibold text-[#e6edf3]">Leads Quentes Prioritários</h2>
-          <span className="text-[10px] text-[#f85149] bg-[#f85149]/10 border border-[#f85149]/20 px-2 py-0.5 rounded ml-auto">
-            Prioridade
-          </span>
+      {/* Vendas do mês banner */}
+      {vendidosMes > 0 && (
+        <div className="rounded-xl border border-[#166534]/30 bg-[#166534]/10 px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-[#8b949e] font-medium">Vendas realizadas este mês</p>
+            <p className="text-2xl font-black text-[#3fb950] mt-0.5">{vendidosMes} lote{vendidosMes > 1 ? 's' : ''}</p>
+          </div>
+          {valorVendidosMes > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-[#8b949e]">Volume financeiro</p>
+              <p className="text-xl font-bold text-[#56d364]">{fmt(valorVendidosMes)}</p>
+            </div>
+          )}
         </div>
-        {typedHotLeads.length === 0 ? (
-          <p className="text-sm text-[#484f58] text-center py-4">Nenhum lead quente no momento.</p>
-        ) : (
+      )}
+
+      <div className="grid grid-cols-2 gap-5">
+        {/* Pipeline Funnel */}
+        <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-4 h-4 text-[#15803d]" />
+            <h2 className="text-sm font-semibold text-[#e6edf3]">Pipeline de Vendas</h2>
+            <Link href="/contacts" className="ml-auto text-[10px] text-[#58a6ff] hover:underline flex items-center gap-1">
+              Ver todos <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
           <div className="space-y-2">
-            {typedHotLeads.map((lead, i) => (
+            {stageCounts.map(({ stage, count }) => (
+              <div key={stage} className="flex items-center gap-3">
+                <span className="text-xs text-[#8b949e] w-24 shrink-0">{STAGE_LABELS[stage]}</span>
+                <div className="flex-1 h-2 bg-[#21262d] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#166534] rounded-full transition-all"
+                    style={{ width: `${(count / maxStage) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-[#e6edf3] w-6 text-right">{count}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-[#21262d] flex items-center gap-2">
+            <Flame className="w-3.5 h-3.5 text-[#f85149]" />
+            <span className="text-xs text-[#8b949e]">{leadsQuentes} leads quentes</span>
+          </div>
+        </div>
+
+        {/* Empreendimentos */}
+        <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Building2 className="w-4 h-4 text-[#15803d]" />
+            <h2 className="text-sm font-semibold text-[#e6edf3]">Empreendimentos</h2>
+            <Link href="/empreendimentos" className="ml-auto text-[10px] text-[#58a6ff] hover:underline flex items-center gap-1">
+              Ver todos <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {allEmps.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-[#484f58]">Nenhum empreendimento cadastrado.</p>
+              <Link href="/empreendimentos" className="text-xs text-[#15803d] hover:underline mt-1 inline-block">
+                Cadastrar agora →
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {allEmps.slice(0, 3).map(emp => {
+                const counts = lotesByEmp[emp.id] ?? { disp: 0, reserv: 0, vend: 0 }
+                const total = counts.disp + counts.reserv + counts.vend
+                const vendPct = total > 0 ? Math.round((counts.vend / total) * 100) : 0
+                return (
+                  <Link
+                    key={emp.id}
+                    href={`/empreendimentos/${emp.id}`}
+                    className="block rounded-lg border border-[#30363d] bg-[#0d1117] p-3 hover:border-[#166534]/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-[#e6edf3]">{emp.nome}</p>
+                        <p className="text-xs text-[#8b949e]">{emp.cidade}, {emp.estado}</p>
+                      </div>
+                      <span className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded font-semibold',
+                        emp.status === 'lancamento' ? 'bg-[#1f6feb]/20 text-[#58a6ff]' :
+                        emp.status === 'esgotado' ? 'bg-[#f85149]/20 text-[#f85149]' :
+                        'bg-[#166534]/20 text-[#3fb950]'
+                      )}>
+                        {emp.status.charAt(0).toUpperCase() + emp.status.slice(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#166534] rounded-full" style={{ width: `${vendPct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-[#8b949e] shrink-0">
+                        {counts.vend}/{total} vendidos
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hot Leads */}
+      {hotLeads.length > 0 && (
+        <div className="rounded-xl border border-[#f85149]/20 bg-[#f85149]/5 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Flame className="w-4 h-4 text-[#f85149]" />
+            <h2 className="text-sm font-semibold text-[#e6edf3]">Leads Quentes — Ação Imediata</h2>
+            <Link href="/contacts?label=HOT" className="ml-auto text-[10px] text-[#f85149] hover:underline flex items-center gap-1">
+              Ver todos <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {hotLeads.map((lead, i) => (
               <Link
                 key={lead.id}
                 href={`/contacts/${lead.id}`}
-                className="flex items-center gap-3 rounded-lg bg-[#161b22] border border-[#30363d] px-4 py-3 hover:border-[#f85149]/30 hover:bg-[#1c2333] transition-all group"
+                className="flex items-center gap-3 rounded-lg bg-[#161b22] border border-[#30363d] px-4 py-3 hover:border-[#f85149]/30 transition-all"
               >
                 <span className="text-xs font-bold text-[#484f58] w-4">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-[#e6edf3] truncate">{lead.name}</p>
-                  <p className="text-xs text-[#484f58] truncate">
-                    {[lead.address, lead.city, lead.state].filter(Boolean).join(', ')}
-                  </p>
+                  <p className="text-xs text-[#484f58]">{lead.empreendimentos?.nome ?? 'Sem empreendimento'}</p>
                 </div>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[#f85149]/10 text-[#f85149] border-[#f85149]/20 whitespace-nowrap">
-                  HOT
+                <span className={cn('text-[10px] px-2 py-0.5 rounded border font-semibold', STAGE_COLORS[lead.stage ?? 'novo_lead'])}>
+                  {STAGE_LABELS[lead.stage ?? 'novo_lead']}
                 </span>
               </Link>
             ))}
           </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-5">
-        {/* Leaderboard */}
-        <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Trophy className="w-4 h-4 text-[#e3b341]" />
-            <h2 className="text-sm font-semibold text-[#e6edf3]">
-              Ranking — {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
-            </h2>
-          </div>
-          {typedLeaderboard.length === 0 ? (
-            <p className="text-sm text-[#484f58] text-center py-4">Sem dados de ranking para este mês.</p>
-          ) : (
-            <div className="space-y-4">
-              {typedLeaderboard.map((entry, i) => {
-                const repName = (entry.user as { name: string } | undefined)?.name ?? 'Rep'
-                return (
-                  <div key={entry.id} className="flex items-center gap-3">
-                    <span
-                      className={cn(
-                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                        i === 0
-                          ? 'bg-[#e3b341]/20 text-[#e3b341]'
-                          : i === 1
-                          ? 'bg-[#8b949e]/20 text-[#8b949e]'
-                          : 'bg-[#21262d] text-[#484f58]'
-                      )}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-[#e6edf3] truncate">{repName}</p>
-                        <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                          <span className="text-sm font-bold text-[#e6edf3] tabular-nums">
-                            {entry.avg_rep_score.toFixed(1)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <ScoreBar score={entry.avg_rep_score} />
-                        <span className="text-[10px] text-[#484f58]">{entry.calls_count} calls</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
-
-        {/* Focus Today */}
-        <div className="rounded-xl border border-[#166534]/30 bg-[#166534]/5 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Target className="w-4 h-4 text-[#15803d]" />
-            <h2 className="text-sm font-semibold text-[#e6edf3]">Foco do Treinamento de Hoje</h2>
-            <span className="text-[10px] text-[#15803d] bg-[#166534]/10 border border-[#166534]/20 px-2 py-0.5 rounded ml-auto">
-              IA
-            </span>
-          </div>
-          {typedFocusReps.length === 0 ? (
-            <div className="rounded-lg border border-[#30363d] bg-[#161b22] p-4 text-center">
-              <p className="text-sm text-[#484f58]">Nenhum dado de treinamento disponível.</p>
-              <p className="text-xs text-[#484f58] mt-1">
-                Assim que calls forem analisadas, as sugestões de treinamento aparecerão aqui.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {typedFocusReps.map((rep, i) => {
-                const repName = rep.users?.name ?? 'Rep'
-                const score = rep.avg_rep_score
-                return (
-                  <div key={i} className="rounded-lg border border-[#30363d] bg-[#161b22] p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <p className="text-xs text-[#8b949e]">{repName}</p>
-                        <p className="text-sm font-semibold text-[#e6edf3]">Score baixo — revisar calls</p>
-                      </div>
-                      <span className={cn('text-lg font-black tabular-nums', scoreColor(score))}>
-                        {score.toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-2 mt-2 pt-2 border-t border-[#21262d]">
-                      <Zap className="w-3.5 h-3.5 text-[#15803d] mt-0.5 shrink-0" />
-                      <p className="text-xs text-[#8b949e] leading-relaxed">
-                        Revise as últimas calls deste rep e identifique os pontos de melhoria no playbook.
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

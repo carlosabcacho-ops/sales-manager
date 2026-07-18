@@ -1,4 +1,39 @@
 export type ContactLabel = 'HOT' | 'WARM' | 'COLD'
+export type ContactStage = 'novo_lead' | 'qualificado' | 'visita' | 'proposta' | 'contrato' | 'pos_venda'
+export type EmpreendimentoStatus = 'ativo' | 'lancamento' | 'esgotado' | 'suspenso'
+export type LoteStatus = 'disponivel' | 'reservado' | 'vendido' | 'bloqueado'
+
+export interface Empreendimento {
+  id: string
+  organization_id: string
+  nome: string
+  cidade?: string
+  estado?: string
+  total_lotes: number
+  preco_medio_lote?: number
+  area_total_m2?: number
+  status: EmpreendimentoStatus
+  descricao?: string
+  created_at: string
+  updated_at: string
+  lotes?: Lote[]
+}
+
+export interface Lote {
+  id: string
+  organization_id: string
+  empreendimento_id: string
+  numero: string
+  quadra?: string
+  area_m2?: number
+  preco?: number
+  status: LoteStatus
+  comprador_id?: string
+  data_venda?: string
+  created_at: string
+  empreendimento?: { nome: string }
+  comprador?: { name: string }
+}
 export type UserRole = 'owner' | 'manager' | 'rep'
 export type CallStatus = 'pending' | 'transcribing' | 'analyzing' | 'completed' | 'failed'
 

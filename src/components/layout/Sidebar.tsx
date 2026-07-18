@@ -3,21 +3,54 @@
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Users, Phone, BookOpen,
-  Trophy, Settings, ChevronRight, MessageSquare, Swords, LogOut
+  LayoutDashboard, Phone, BookOpen, Trophy, Settings,
+  ChevronRight, MessageSquare, Swords, LogOut,
+  Building2, Grid3x3, TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
-const nav = [
-  { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
-  { href: '/contacts', label: 'Contatos', icon: Users },
-  { href: '/calls', label: 'Análise de Calls', icon: Phone },
-  { href: '/leaderboard', label: 'Ranking', icon: Trophy },
-  { href: '/roleplay', label: 'Roleplay IA', icon: Swords },
-  { href: '/chat', label: 'Coach IA', icon: MessageSquare },
-  { href: '/playbook', label: 'Playbook', icon: BookOpen },
-  { href: '/settings', label: 'Configurações', icon: Settings },
+const groups = [
+  {
+    key: 'geral',
+    label: '',
+    items: [
+      { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+    ],
+  },
+  {
+    key: 'imoveis',
+    label: 'Imóveis',
+    items: [
+      { href: '/empreendimentos', label: 'Empreendimentos', icon: Building2 },
+      { href: '/lotes', label: 'Lotes', icon: Grid3x3 },
+    ],
+  },
+  {
+    key: 'vendas',
+    label: 'Vendas',
+    items: [
+      { href: '/contacts', label: 'Pipeline', icon: TrendingUp },
+      { href: '/calls', label: 'Análise de Calls', icon: Phone },
+      { href: '/leaderboard', label: 'Ranking', icon: Trophy },
+    ],
+  },
+  {
+    key: 'treino',
+    label: 'Treinamento',
+    items: [
+      { href: '/roleplay', label: 'Roleplay IA', icon: Swords },
+      { href: '/chat', label: 'Coach IA', icon: MessageSquare },
+      { href: '/playbook', label: 'Playbook', icon: BookOpen },
+    ],
+  },
+  {
+    key: 'config',
+    label: '',
+    items: [
+      { href: '/settings', label: 'Configurações', icon: Settings },
+    ],
+  },
 ]
 
 interface SidebarProps {
@@ -53,31 +86,37 @@ export function Sidebar({ orgName = 'TerràVenda' }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {nav.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group',
-                active
-                  ? 'bg-[#166534]/20 text-[#15803d] border border-[#166534]/30'
-                  : 'text-[#8b949e] hover:bg-[#1c2333] hover:text-[#e6edf3]'
-              )}
-            >
-              <Icon
-                className={cn(
-                  'w-4 h-4 shrink-0',
-                  active ? 'text-[#15803d]' : 'text-[#8b949e] group-hover:text-[#e6edf3]'
-                )}
-              />
-              {label}
-              {active && <ChevronRight className="w-3 h-3 ml-auto text-[#15803d]" />}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-3">
+        {groups.map(group => (
+          <div key={group.key}>
+            {group.label && (
+              <p className="px-3 mb-1 text-[10px] font-semibold text-[#484f58] uppercase tracking-widest">
+                {group.label}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href || pathname.startsWith(href + '/')
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group border',
+                      active
+                        ? 'bg-[#166534]/20 text-[#15803d] border-[#166534]/30'
+                        : 'text-[#8b949e] hover:bg-[#1c2333] hover:text-[#e6edf3] border-transparent'
+                    )}
+                  >
+                    <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-[#15803d]' : 'text-[#8b949e] group-hover:text-[#e6edf3]')} />
+                    {label}
+                    {active && <ChevronRight className="w-3 h-3 ml-auto text-[#15803d]" />}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Org badge + logout */}
